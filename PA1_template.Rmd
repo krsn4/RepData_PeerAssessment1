@@ -7,19 +7,106 @@ output:
 
 
 ## Loading and preprocessing the data
-
-
-
+Here is the R code to unzip and load the input data, and the displayof its summary.
+```{r loadandprocess}
+data0 <- read.csv(unzip("activity.zip"))
+summary(data0)
+```
 ## What is mean total number of steps taken per day?
+Here is the R code to compute the mean total number of steps per day, and its first 10-day output as well as the histogram.
+```{r meansteps}
+stepsperday <- tapply(data0$steps, data0$date, sum, na.rm = TRUE)
+```
+```{r df1, echo=FALSE}
+df1 <- data.frame("steps"=stepsperday)
+head(df1, 10)
+```
+```{r histogram, fig.height=4, fig.width=5, echo=FALSE}
+library(ggplot2)
+ggplot(df1, aes(x=steps)) + geom_histogram(bins = 10) + xlab("steps/day") + ylab("Days")
+```
 
-
+Here is the R code to compute the daily mean and median of steps per day, and their first 10-day output.
+```{r meanmedian}
+meanstepsperday <- tapply(data0$steps, data0$date, mean, na.rm = TRUE)
+medianstepsperday <- tapply(data0$steps, data0$date, median, na.rm = TRUE)
+head(data.frame("mean" = meanstepsperday, "median" = medianstepsperday), 10)
+```
 
 ## What is the average daily activity pattern?
+Here is the time series plot of steps in 5-minute intervals, averaged across the given two-month period, 2019-10-1 ~ 2012-11-30.
+```{r avgsteps, echo=FALSE, fig.height=4, fig.width=5, warning=FALSE}
+avgstepsperinterval <- tapply(data0$steps, data0$interval, mean, na.rm = TRUE)
+df2 <- data.frame("minutes" = unique(data0$interval), "steps" = avgstepsperinterval)
 
+ggplot(df2, aes(x=minutes, y=steps)) +
+  geom_line(na.rm = TRUE) +
+  xlab("interval minutes") +
+  ylab("average step counts")
+```
 
+From the graph or the calculation below,
+```{r maximum}
+avgstepsperinterval[which.max(avgstepsperinterval)]
+```
+The maximum average steps across the two-month period occurs at interval 835 with 206.2 steps.
 
 ## Imputing missing values
+In the data set, there are missing values n step counts, denoted by 'NA'.  There are:
+```{r nas}
+c("missing" = sum(is.na(data0$steps)), "total" = length(data0$steps))
+```
+missing values (left) out of the total (right).
 
+We fill in the missing values with the mean steps for the five-minute interval (calculated earlier).  
+```{r fillin}
+#repeat avgstepsperinterval 61 days (=17568rows/288intervals)
+repavgstepsperint <- rep(avgstepsperinterval, 61)
+#create data0$stepsnonas as a copy of data0$steps
+data0$stepsnonas <- data0$steps
+#populate stepsnonas where na by the mean over 61 days, interval-wise.
+data0$stepsnonas[which(is.na(data0$steps))] <- repavgstepsperint[which(is.na(data0$steps))]
+#Confirm the result
+c("missing_before" = sum(is.na(data0$steps)), "missing_after" = sum(is.na(data0$stepsnonas)))
+```
+The histogram of the steps with filled missing values is as follows:
 
+```{r histnonas, echo=FALSE, fig.height=4, fig.width=5}
+df3 <- data.frame("stepsperday" = tapply(data0$stepsnonas, data0$date, sum))
+ggplot(df3, aes(x=stepsperday)) + geom_histogram(bins = 10) + xlab("stepS/day") + ylab("Days")
+```
+
+Here is the R code for mean and median total number of steps taken per day.
+```{r meanmedian_nonas}
+meanstepsperday2 <- tapply(data0$stepsnonas, data0$date, mean, na.rm = FALSE)
+medianstepsperday2 <- tapply(data0$stepsnonas, data0$date, median, na.rm = FALSE)
+```
+
+Do these values differ from the estimates from the first part of the assignment?  What is the impact of imputing missing data on the estimates of the total daily number of steps?  Is thee graphs below, red dots are the imputed values.  There is more impact on the median than on the mean from the data imputing in this work.  This is because of the imputation method being the mean.
+
+```{r plotting, echo=FALSE, fig.height=4, fig.width=5, warning=FALSE}
+df4 <- data.frame("date" = as.Date(unique(data0$date)), "mean" = meanstepsperday, "median" = medianstepsperday, "mean_imputed" = meanstepsperday2, "median_imputed" = medianstepsperday2)
+
+g <- ggplot(df4, aes(x=date))
+
+g1 <- g + geom_point(aes(y=mean_imputed, col="red")) + geom_line(aes(y=mean_imputed))
+g1 + geom_point(aes(y=mean)) + geom_line(aes(y=mean))
+
+g2 <- g + geom_point(aes(y=median_imputed, col="red")) + geom_line(aes(y=median_imputed))
+g2 + geom_point(aes(y=median)) + geom_line(aes(y=median))
+```
 
 ## Are there differences in activity patterns between weekdays and weekends?
+We create a factor variable to determine if the given day is a weekday or not, as follows.
+
+```{r weekend}
+data0$weekend <- weekdays(as.Date(data0$date)) %in% c("Saturday", "Sunday")
+data0$weekend <- factor(data0$weekend, levels = c(TRUE, FALSE), labels = c("weekend", "weekday"))
+```
+We then calculate -- and plot the comparison of -- weekdays vs weekends 5-minute interval time series of steps, averaged over the two months, in red.
+
+```{r plotpanel, warning=FALSE}
+g3 <- ggplot(data0, aes(x=interval, y=stepsnonas)) +
+      geom_point(alpha=0.3) + facet_wrap(weekend ~. )
+g3 + stat_summary(geom="line", size=1.2, fun.y="mean", colour = "red")
+```
